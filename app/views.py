@@ -1,7 +1,9 @@
 # views are the handlers that responds to requests from the web browsers
-from flask import render_template,url_for,redirect,flash
+from flask import render_template,url_for,redirect,flash, request
+from werkzeug.utils import secure_filename
+
 from app import app, login_manager
-from app.form import LoginForm, publications
+from app.form import LoginForm, publications, AdminForm
 from publications_query import *
 from calendar import monthrange
 from app.authentication import auth
@@ -40,10 +42,6 @@ def login():
         else:
              flash('invalid username or password')
     return render_template('login.html', form=form)
-
-
-
-
 '''
     only logged and authenticated users get access to this page
     to sends email of the publication to the librarians
@@ -70,45 +68,56 @@ def index():
 
     if form.validate_on_submit():
         form.start_date.data = form.start_date.data.replace(day=1)
-
         if not form.end_date.data:
             print("End Date not provided")
             day = monthrange(form.start_date.data.year, form.start_date.data.month)
             print(day, form.start_date.data)
             form.end_date.data = form.start_date.data.replace(day=day[1])
             print(' base on the start date provide then the new end day is',form.end_date.data)
-
-
         else:
             print("End Date provided")
             day = monthrange(form.end_date.data.year, form.end_date.data.month)
             form.end_date.data = form.end_date.data.replace(day=day[1])
             print('this is the date when is provided', form.end_date.data)
-
-
-
         if form.start_date.data > form.end_date.data:
                 flash('please enter the correct dates')
         elif form.start_date.data==form.end_date.data:
                 form.start_date.data = form.start_date.data.replace(day=1)
                 day = monthrange(form.end_date.data.year, form.end_date.data.month)
                 form.end_date.data = form.end_date.data.replace(day=day[1])
-
         else:
             t = Thread(target=run_pub, args=(form.start_date.data, form.end_date.data))
             t.start()
             flash('Email will be sent, please check your emails')
-
     return render_template('index.html', form=form)
 
-
+@app.route('/admin', methods=['GET'])
+@login_required
+def admin():
+    form = AdminForm()
+    return render_template('admin.html', form=form)
+@app.route('/upload', methods=[ 'POST'])
+@login_required
+def upload():
+    if request.method == 'POST':
+        key=request.files.get('keys')
+        author=request.files.get('authors')
+        if key is None and author is None :
+            flash('No selected file')
+            return redirect(url_for('admin'))
+        else:
+            if key is not None:
+                key.save(os.path.join(app.config['UPLOAD_FOLDER'], "keys.txt"))
+            if author is not None:
+                author.save(os.path.join(app.config['UPLOAD_FOLDER'], "authors.txt"))
+            return redirect(url_for('index'))
+    return redirect(url_for('login'))
 @app.route('/logout', methods=['GET', 'POST'])
 @login_required
 def logout():
     logout_user()
     flash('you logged out')
     return redirect(url_for('login'))
-
 
 
 
